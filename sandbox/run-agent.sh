@@ -36,7 +36,7 @@ REMEDIATION_PROMPT=${REMEDIATION_PROMPT:?REMEDIATION_PROMPT is required}
 CODING_AGENT=${CODING_AGENT:-opencode}
 MODEL=${MODEL:-}
 AGENT_TIMEOUT_SECONDS=${AGENT_TIMEOUT_SECONDS:-1200}
-TEST_CMD=${TEST_CMD:-./mvnw test}
+TEST_CMD=${TEST_CMD:-if ./mvnw -v >/dev/null 2>&1; then ./mvnw test; else mvn test; fi}
 WORKDIR=${WORKDIR:-/workspace}
 
 # Restricted pods run as a random UID with no passwd entry, so HOME is unset
@@ -153,7 +153,7 @@ export -f run_agent
 export CODING_AGENT MODEL PROMPT_FILE
 if ! timeout "$AGENT_TIMEOUT_SECONDS" bash -c run_agent > "$WORKDIR/agent.log" 2>&1; then
   log "coding agent exited non-zero or timed out after ${AGENT_TIMEOUT_SECONDS}s, see agent.log"
-  tail -50 "$WORKDIR/agent.log" | strip_ansi >&2
+  tail -50 "$WORKDIR/agent.log" | strip_ansi >&2 || true
   fail agent_error
 fi
 unset GITHUB_TOKEN LLM_API_KEY
@@ -184,11 +184,11 @@ log "agent changed $FILES_CHANGED file(s); verifying with: $TEST_CMD"
 TEST_LOG="$WORKDIR/test.log"
 if ! (cd "$REPO_DIR" && bash -c "$TEST_CMD") > "$TEST_LOG" 2>&1; then
   log "test suite failed, nothing pushed"
-  grep -E "Tests run:|BUILD FAILURE|ERROR" "$TEST_LOG" | tail -5 >&2
+  grep -E "Tests run:|BUILD FAILURE|Error" "$TEST_LOG" | tail -5 >&2 || true
   result tests_failed "$BRANCH" "$FILES_CHANGED" ""
 fi
 
-TEST_SUMMARY=$(grep -oE "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+(, Skipped: [0-9]+)?" "$TEST_LOG" | tail -1)
+TEST_SUMMARY=$(grep -oE "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+(, Skipped: [0-9]+)?" "$TEST_LOG" | tail -1 || true)
 TEST_SUMMARY=${TEST_SUMMARY:-tests passed (summary unavailable)}
 
 # --- Push only what the tests approved --------------------------------------
