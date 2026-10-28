@@ -17,11 +17,19 @@ Agent Sandbox (`Sandbox` CRDs), GitHub REST API
 
 ```
 kubernetes-agent (analysis decides promote=false)
-  └─ A2A request → remediation-agent
-       └─ Sandbox CR (isolated pod, restricted-v2, no SA token, egress allow-list)
-            └─ sandbox/run-agent.sh: clone → coding agent → ./mvnw test → push branch
-       └─ watches sandbox → opens PR with verification evidence, or a GitHub issue
+  └─ LangChain4j A2A client agent (async, activation-gated) → A2A JSON-RPC
+       └─ remediation-agent (A2A server: agent card, remediate skill)
+            └─ Sandbox CR (isolated pod, restricted-v2, no SA token, egress allow-list)
+                 └─ sandbox/run-agent.sh: clone → coding agent → ./mvnw test → push branch
+            └─ watches sandbox → opens PR with verification evidence, or a GitHub issue
 ```
+
+**A2A protocol.** A2A Java SDK 1.3.x (the generation the LangChain4j A2A client
+speaks). The agent card is served at `/.well-known/agent-card.json`; JSON-RPC
+`SendMessage` at `/` with the `A2A-Version: 1.0` header. Message text is a JSON
+`RemediationRequest`; the response artifact is a JSON `RemediationResponse`.
+Long runs use the task lifecycle: the executor marks the task working and
+completes it on a virtual thread when the sandbox finishes.
 
 **Isolation model.** The coding agent runs untrusted, LLM-generated commands inside a
 sandbox pod: `restricted-v2` SCC, read-only root filesystem, no service-account token,
@@ -44,7 +52,17 @@ sandbox/
   run-agent.sh    # CLI-agnostic wrapper: clone → agent → verify → push → result JSON
   Dockerfile      # sandbox image: ubi9-minimal, JDK 25, Maven, git + coding agent
   prompt.md       # remediation prompt template passed to the coding agent
-src/              # Quarkus A2A service (phase 2)
+src/main/java/dev/kevindubois/remediation/
+  a2a/
+    RemediationAgentCard.java      # @PublicAgentCard producer (remediate skill)
+    RemediationAgentExecutor.java  # A2A JSON-RPC → RemediationService, async completion
+  RemediationRequest.java          # record: repoUrl, baseBranch, issueCategory, ...
+  RemediationResponse.java         # record: status, prLink/issueLink, evidence
+  RemediationService.java          # orchestration: allow-list, sandbox, PR/issue
+  SandboxRunner.java               # Sandbox CR lifecycle + result from pod log
+  SandboxManifest.java             # hardened Sandbox CR builder (isolation profile)
+  SandboxConfig.java               # sandbox runtime config record
+  GitHubClient.java                # minimal GitHub REST client (PR + issue)
 ```
 
 ## The wrapper contract

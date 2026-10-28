@@ -13,9 +13,12 @@ analysis to it.
 ## How it works
 
 ```
-kubernetes-agent ──A2A──▶ remediation-agent
-                            │ creates a Sandbox CR (isolated pod)
-                            ▼
+kubernetes-agent (LangChain4j A2A client agent, async, activation-gated)
+        │ A2A JSON-RPC: SendMessage → Task → artifact
+        ▼
+remediation-agent (A2A server, agent card, remediate skill)
+        │ creates a Sandbox CR (isolated pod)
+        ▼
                    ┌─────────────────────────────────────┐
                    │ sandbox: run-agent.sh               │
                    │  clone repo                         │
@@ -55,9 +58,20 @@ docker build --build-arg CODING_AGENT=opencode -t quay.io/you/remediation-sandbo
 The service selects the image through configuration, so demoing a different agent
 is a config change, not a rebuild.
 
+## The A2A contract
+
+The service is a real A2A agent: agent card at `/.well-known/agent-card.json`,
+JSON-RPC `SendMessage` (v1.0 protocol) at `/`. The message text is a JSON
+`RemediationRequest`; the task completes with the JSON `RemediationResponse` as
+its artifact. The sandbox run takes minutes — the executor reports the task as
+working and completes it on a virtual thread, so the A2A request thread never
+blocks.
+
 ## Status
 
 Phase 1 (sandbox prototype) is complete and verified against the demo NPE
 scenario: opencode fixed `MetricsResource.getStatus()`, added a regression test,
-and the wrapper pushed the branch only after the suite passed. The A2A service is
-under development — see [AGENTS.md](AGENTS.md) for the development guide.
+and the wrapper pushed the branch only after the suite passed. Phase 2 (the A2A
+service) is complete: agent card, JSON-RPC task lifecycle, sandbox manifest with
+the full isolation profile, and evidence-based PR/issue creation, all tested.
+See [AGENTS.md](AGENTS.md) for the development guide.
