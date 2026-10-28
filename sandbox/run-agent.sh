@@ -38,6 +38,11 @@ MODEL=${MODEL:-}
 AGENT_TIMEOUT_SECONDS=${AGENT_TIMEOUT_SECONDS:-1200}
 TEST_CMD=${TEST_CMD:-./mvnw test}
 WORKDIR=${WORKDIR:-/workspace}
+
+# Restricted pods run as a random UID with no passwd entry, so HOME is unset
+# and the toolchain (opencode config, ~/.m2) writes to the read-only root.
+# Point HOME at the writable agent-home volume; local runs keep their HOME.
+export HOME=${HOME:-/home/sandbox}
 BRANCH_PREFIX=${BRANCH_PREFIX:-fix/k8s-issue}
 
 START=$(date +%s)
