@@ -5,11 +5,9 @@ it to the sandbox. `run-agent.sh` appends the rules section; only the context be
 varies per remediation.
 
 ```markdown
-## What happened
-
 A canary deployment of this repository was rolled back by an automated analysis.
 
-**Decision:** rollback (confidence {confidence}%)
+**Decision:** rollback
 **Category:** {issueCategory}
 
 **Root cause**
@@ -20,9 +18,9 @@ A canary deployment of this repository was rolled back by an automated analysis.
 
 {analysis}
 
-**Canary error logs**
+**Diagnostic context**
 
 ```
-{errorLogs}
+{diagnosticContext}
 ```
 ```

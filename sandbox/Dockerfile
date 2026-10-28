@@ -14,17 +14,15 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 ARG CODING_AGENT=opencode
 
-RUN microdnf install -y git java-25-openjdk-devel maven openssl \
+RUN microdnf install -y git java-25-openjdk-devel maven openssl tar \
     && microdnf clean all \
     && useradd -m -u 1001 sandbox
 
-# Coding agent CLI. opencode installs via npm, so node comes along; keep this
-# section per-agent when a CLI needs a different runtime.
-RUN curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - \
-    && microdnf install -y nodejs \
-    && microdnf clean all \
-    && npm install -g opencode-ai@latest \
-    && mkdir -p /home/sandbox/.config/opencode
+# Coding agent CLI: opencode binary from the official install script.
+# (The opencode-ai npm package mis-selects its musl variant on glibc images.)
+RUN curl -fsSL https://opencode.ai/install | bash \
+    && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
+    && /usr/local/bin/opencode --version
 
 USER 1001
 WORKDIR /workspace
