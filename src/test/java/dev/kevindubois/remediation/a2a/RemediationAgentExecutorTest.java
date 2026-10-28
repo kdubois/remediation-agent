@@ -57,11 +57,6 @@ class RemediationAgentExecutorTest {
         AgentExecutor executor = producer.agentExecutor();
         executor.execute(context, emitter);
 
-        // the background thread needs a beat to finish
-        for (int i = 0; i < 50 && artifact.get() == null; i++) {
-            Thread.sleep(20);
-        }
-
         verify(service).remediate(any(RemediationRequest.class), any());
         verify(emitter).startWork();
         verify(emitter).complete();

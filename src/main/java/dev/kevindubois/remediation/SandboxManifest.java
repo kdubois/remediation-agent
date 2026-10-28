@@ -127,6 +127,7 @@ public final class SandboxManifest {
         return new ContainerBuilder()
                 .withName("remediation")
                 .withImage(config.image())
+                .withImagePullPolicy("Always")
                 .withEnv(env)
                 .withNewResources()
                 .withRequests(Map.of("cpu", new Quantity("500m"), "memory", new Quantity("512Mi")))
