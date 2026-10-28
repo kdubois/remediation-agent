@@ -49,7 +49,8 @@ class SandboxManifestTest {
 
         var podSecurity = (Map<String, Object>) pod.get("securityContext");
         assertThat(podSecurity.get("runAsNonRoot")).isEqualTo(true);
-        assertThat(podSecurity.get("fsGroup")).isEqualTo(1001);
+        // no hardcoded fsGroup: restricted-v2 assigns one and rejects overrides
+        assertThat(podSecurity).doesNotContainKey("fsGroup");
 
         // /tmp must be writable: the JVM, Maven and node all write there
         var volumes = (java.util.List<Map<String, Object>>) pod.get("volumes");

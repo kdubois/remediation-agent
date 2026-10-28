@@ -20,9 +20,11 @@ RUN microdnf install -y git java-25-openjdk-devel maven openssl tar \
 
 # Coding agent CLI: opencode binary from the official install script.
 # (The opencode-ai npm package mis-selects its musl variant on glibc images.)
+# No build-time version check: the bun-compiled binary aborts under qemu
+# emulation on arm build hosts; it runs fine on real x86-64 hardware.
 RUN curl -fsSL https://opencode.ai/install | bash \
     && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
-    && /usr/local/bin/opencode --version
+    && test -x /usr/local/bin/opencode
 
 USER 1001
 WORKDIR /workspace

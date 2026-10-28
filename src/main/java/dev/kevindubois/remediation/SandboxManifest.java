@@ -92,9 +92,11 @@ public final class SandboxManifest {
     }
 
     private static PodSpec podSpec(SandboxConfig config, List<EnvVar> env) {
+        // No explicit fsGroup: restricted-v2 assigns one from the namespace
+        // range and rejects hardcoded values; the assigned group keeps the
+        // emptyDir volumes writable for the run-as-non-root container.
         var podSecurityContext = new PodSecurityContextBuilder()
                 .withRunAsNonRoot(true)
-                .withFsGroup(1001L)
                 .withNewSeccompProfile()
                 .withType("RuntimeDefault")
                 .endSeccompProfile()
