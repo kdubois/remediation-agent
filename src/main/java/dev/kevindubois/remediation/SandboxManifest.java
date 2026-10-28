@@ -135,7 +135,7 @@ public final class SandboxManifest {
                 .withEnv(env)
                 .withNewResources()
                 .withRequests(Map.of("cpu", new Quantity("500m"), "memory", new Quantity("512Mi")))
-                .withLimits(Map.of("cpu", new Quantity("2"), "memory", new Quantity("2Gi")))
+                .withLimits(Map.of("cpu", new Quantity("2"), "memory", new Quantity("4Gi")))
                 .endResources()
                 .withVolumeMounts(
                         new VolumeMountBuilder().withName("workspace").withMountPath("/workspace").build(),
