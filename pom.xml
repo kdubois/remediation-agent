@@ -49,6 +49,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
 
         <!-- A2A server: JSON-RPC transport with Quarkus route registration.
              Matches the a2a-java-sdk-client version used by langchain4j-agentic-a2a. -->
