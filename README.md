@@ -33,17 +33,33 @@ remediation-agent (A2A server, agent card, remediate skill)
 ```
 
 The agent inside the sandbox is untrusted by design. It runs under the
-`restricted-v2` SCC with a read-only root filesystem, no service-account token,
-zero RBAC, and a namespace EgressFirewall that allows only GitHub, Maven Central,
-DNS and the LLM endpoint. The GitHub token it receives is fine-grained to a single
-repository with `contents:write` — it can push a branch and nothing else. The test
-suite, not the agent, decides whether a fix ships; a human reviews the PR.
-Auto-merge is deliberately deferred.
+`restricted-v2` SCC with a read-only root filesystem (writable only via sized
+emptyDir mounts for `/workspace`, `/home/sandbox` and `/tmp`), no
+service-account token, zero RBAC, and a namespace EgressFirewall that allows
+only GitHub, Maven Central, npm, DNS and the LLM endpoint. The GitHub token it
+receives is fine-grained to a single repository with `contents:write` and
+`pull_requests:write` — it can push branches, open, force-push and delete
+branches in that repository, and nothing else. The test suite, not the agent,
+decides whether a fix ships, and the wrapper rejects runs that modify build
+files or existing tests. A human reviews every PR; auto-merge is deliberately
+deferred.
 
-Hardware isolation via `kata-remote` peer pods is designed in but not active on
-the current cluster — it needs TCP 15150/9000 open in the VPC security groups,
-which the cluster's AWS credentials cannot do. Flipping the Sandbox CR's
-`runtimeClassName` activates it once that changes.
+Hardware isolation via `kata-remote` peer pods is not available on the current
+cluster: it needs the OpenShift sandboxed containers operator with peer pods
+configured for AWS and TCP 15150/9000 open in the VPC security groups, which
+the cluster's AWS credentials cannot do. Enabling it later means installing the
+operator, opening the ports, and adding a `runtimeClassName` to the sandbox pod
+template in `SandboxManifest` — a code change and image rebuild, not a config
+flip.
+
+## Deployment
+
+Deployed through GitOps in the [progressive-delivery](../progressive-delivery)
+repository (`system/remediation-agent/`): the service runs in `openshift-gitops`
+next to the kubernetes-agent that calls it, sandbox pods run in the dedicated
+`remediation` namespace with the EgressFirewall described above. The
+`remediation-agent` secret (`github_token`, `llm_api_key`) is created manually in
+both namespaces — see the kustomization note.
 
 ## Swapping the coding agent
 
@@ -52,11 +68,14 @@ verification (test suite green) is objective and CLI-agnostic:
 
 ```bash
 cd sandbox
-docker build --build-arg CODING_AGENT=opencode -t quay.io/you/remediation-sandbox:opencode .
+docker build --build-arg CODING_AGENT=opencode -t ghcr.io/kdubois/remediation-sandbox:opencode .
+docker push ghcr.io/kdubois/remediation-sandbox:opencode
 ```
 
-The service selects the image through configuration, so demoing a different agent
-is a config change, not a rebuild.
+The image is not built by CI (the workflow builds the service image); build and
+push it manually when the wrapper or toolchain changes. The service selects the
+image through configuration, so demoing a different agent is a config change,
+not a rebuild.
 
 ## The A2A contract
 
@@ -69,9 +88,11 @@ blocks.
 
 ## Status
 
-Phase 1 (sandbox prototype) is complete and verified against the demo NPE
-scenario: opencode fixed `MetricsResource.getStatus()`, added a regression test,
-and the wrapper pushed the branch only after the suite passed. Phase 2 (the A2A
-service) is complete: agent card, JSON-RPC task lifecycle, sandbox manifest with
-the full isolation profile, and evidence-based PR/issue creation, all tested.
-See [AGENTS.md](AGENTS.md) for the development guide.
+Phase 1 (sandbox prototype) is verified against the demo NPE scenario: opencode
+fixed `MetricsResource.getStatus()`, added a regression test, and the wrapper
+pushed the branch only after the suite passed. The A2A service (agent card,
+JSON-RPC task lifecycle with streaming, sandbox manifest with the isolation
+profile, evidence-based PR/issue creation) is unit- and integration-tested and
+deployed through GitOps. The live end-to-end path — sandbox in the cluster,
+A2A round trip with the real streaming task — is exercised by the demo
+scenarios. See [AGENTS.md](AGENTS.md) for the development guide.

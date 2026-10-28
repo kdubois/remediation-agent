@@ -48,11 +48,22 @@ public interface GitHubClient {
     record Issue(String html_url, String number) {
     }
 
-    /** Parses an owner/repo pair from a repository https URL. */
+    /** Parses and normalizes an owner/repo pair from a GitHub repository https URL. */
     static String[] ownerRepo(String repoUrl) {
-        String path = repoUrl.replaceFirst("^https://github\\.com/", "").replaceFirst("\\.git$", "");
+        if (repoUrl == null || repoUrl.isBlank()) {
+            throw new IllegalArgumentException("Repository URL is required");
+        }
+        String path = repoUrl.trim()
+                .replaceFirst("(?i)^https://github\\.com/", "")
+                .replaceFirst("(?i)^http://github\\.com/", "")
+                .replaceAll("/+$", "")
+                .replaceFirst("\\.git$", "")
+                .replaceAll("/+$", "");
+        if (path.startsWith("http") || path.contains("://")) {
+            throw new IllegalArgumentException("Not a GitHub repository URL: " + repoUrl);
+        }
         String[] parts = path.split("/");
-        if (parts.length < 2) {
+        if (parts.length < 2 || parts[0].isBlank() || parts[1].isBlank()) {
             throw new IllegalArgumentException("Not a GitHub repository URL: " + repoUrl);
         }
         return new String[] { parts[0], parts[1] };

@@ -13,6 +13,12 @@ import jakarta.inject.Inject;
  * Runs one remediation in a Sandbox custom resource and returns the wrapper's
  * result JSON. Creates the sandbox, polls its pod until it exits (or the
  * timeout hits), reads the result from the pod log, then deletes the sandbox.
+ *
+ * <p>The pod name equals the Sandbox CR name — a contract of the Agent
+ * Sandbox controller (it sets an agents.x-k8s.io/pod-name annotation only as
+ * a legacy fallback). Infrastructure failures (no namespace, bad image, RBAC,
+ * missing pod) return null so the caller can report an infra error rather
+ * than a remediation outcome.
  */
 @ApplicationScoped
 public class SandboxRunner {
@@ -32,7 +38,8 @@ public class SandboxRunner {
      * Runs the remediation sandbox. Blocks until the wrapper finishes or the
      * timeout expires — callers decide whether to wait on their own threads.
      *
-     * @return the wrapper result, or an agent_error result with the failure reason
+     * @return the wrapper result, or null when the sandbox could not be
+     *         created, observed or read
      */
     public SandboxResult run(String name, RemediationRequest request, String prompt) {
         var sandbox = Serialization.unmarshal(
@@ -45,58 +52,73 @@ public class SandboxRunner {
                     .create();
         } catch (Exception e) {
             Log.errorf(e, "Failed to create sandbox %s", name);
-            return new SandboxResult("agent_error", null, 0, null, null, 0);
+            return null;
         }
 
         try {
-            awaitPod(name);
-            String log = client.pods().inNamespace(namespace()).withName(name).getLog();
+            if (!awaitPod(name)) {
+                return null;
+            }
+            String log = readLog(name);
+            if (log == null) {
+                return null;
+            }
             SandboxResult result = parseResult(log);
             Log.infof("Sandbox %s finished: %s", name, result == null ? "no result" : result.status());
-            return result == null
-                    ? new SandboxResult("agent_error", null, 0, null, null, 0)
-                    : result;
+            return result;
         } finally {
             delete(name);
         }
     }
 
-    String namespace() {
-        return client.getConfiguration().getNamespace() != null
-                ? client.getConfiguration().getNamespace()
-                : "remediation";
+    /** Deletes a running sandbox, used by A2A task cancellation. */
+    public void cancel(String name) {
+        delete(name);
     }
 
-    private String toJson(Object manifest) {
-        try {
-            return mapper.writeValueAsString(manifest);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to serialize sandbox manifest", e);
-        }
+    String namespace() {
+        return config.namespace();
     }
 
     /**
-     * Waits for the sandbox pod to reach a terminal phase. The pod name equals
-     * the sandbox name.
+     * Waits for the sandbox pod to reach a terminal phase.
      */
-    private void awaitPod(String name) {
+    private boolean awaitPod(String name) {
         long deadline = System.currentTimeMillis() + config.timeoutSeconds() * 1000L;
+        boolean seen = false;
         while (System.currentTimeMillis() < deadline) {
-            Pod pod = client.pods().inNamespace(namespace()).withName(name).get();
+            Pod pod;
+            try {
+                pod = client.pods().inNamespace(namespace()).withName(name).get();
+            } catch (Exception e) {
+                Log.errorf(e, "Failed to watch sandbox pod %s", name);
+                return false;
+            }
             if (pod != null && pod.getStatus() != null) {
+                seen = true;
                 String phase = pod.getStatus().getPhase();
                 if ("Succeeded".equals(phase) || "Failed".equals(phase)) {
-                    return;
+                    return true;
                 }
             }
             try {
                 Thread.sleep(5000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                return false;
             }
         }
-        Log.warnf("Sandbox %s timed out after %ds", name, config.timeoutSeconds());
+        Log.warnf("Sandbox %s timed out after %ds (pod seen: %s)", name, config.timeoutSeconds(), seen);
+        return false;
+    }
+
+    private String readLog(String name) {
+        try {
+            return client.pods().inNamespace(namespace()).withName(name).getLog();
+        } catch (Exception e) {
+            Log.errorf(e, "Failed to read sandbox pod log %s", name);
+            return null;
+        }
     }
 
     /** Extracts the wrapper's result JSON — its last stdout line — from the pod log. */
@@ -125,6 +147,14 @@ public class SandboxRunner {
         } catch (Exception e) {
             // shutdownPolicy Delete cleans up eventually; a failed delete here is not fatal
             Log.debugf("Failed to delete sandbox %s: %s", name, e.getMessage());
+        }
+    }
+
+    private String toJson(Object manifest) {
+        try {
+            return mapper.writeValueAsString(manifest);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize sandbox manifest", e);
         }
     }
 }

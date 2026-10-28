@@ -40,7 +40,10 @@ public class RemediationAgentCard {
                 .supportedInterfaces(List.of(
                         new AgentInterface(TransportProtocol.JSONRPC.asString(), agentUrl + ":" + port)))
                 .capabilities(AgentCapabilities.builder()
-                        .streaming(false)
+                        // Streaming keeps the response open until the terminal task
+                        // event: the long sandbox run must not rely on the blocking
+                        // path, whose agent timeout would return a bare WORKING task.
+                        .streaming(true)
                         .pushNotifications(false)
                         .build())
                 .skills(List.of(AgentSkill.builder()

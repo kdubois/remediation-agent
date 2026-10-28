@@ -5,6 +5,10 @@ import dev.kevindubois.remediation.RemediationRequest;
 import dev.kevindubois.remediation.RemediationResponse;
 import dev.kevindubois.remediation.RemediationService;
 import io.quarkus.logging.Log;
+import jakarta.annotation.PreDestroy;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Produces;
+import jakarta.inject.Inject;
 import org.a2aproject.sdk.server.agentexecution.AgentExecutor;
 import org.a2aproject.sdk.server.agentexecution.RequestContext;
 import org.a2aproject.sdk.server.tasks.AgentEmitter;
@@ -12,10 +16,6 @@ import org.a2aproject.sdk.spec.A2AError;
 import org.a2aproject.sdk.spec.Message;
 import org.a2aproject.sdk.spec.Part;
 import org.a2aproject.sdk.spec.TextPart;
-
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Produces;
-import jakarta.inject.Inject;
 
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -26,23 +26,29 @@ import java.util.concurrent.Executors;
  * delegates to {@link RemediationService}, and returns the response JSON as
  * the task artifact.
  *
- * <p>The sandbox run takes minutes, so the executor does not block the A2A
- * request thread: it reports the task as working and completes it on a
- * virtual thread when the remediation finishes.
+ * <p>The sandbox run takes minutes. The agent card advertises streaming, so
+ * the response stays open until the terminal event: the executor reports the
+ * task as working, does the work on a virtual thread, and completes the task
+ * when the remediation finishes. Cancelling the task deletes the sandbox.
  */
 @ApplicationScoped
 public class RemediationAgentExecutor {
-
-    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     private final RemediationService remediationService;
 
     private final ObjectMapper mapper;
 
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+
     @Inject
-    public RemediationAgentExecutor(RemediationService remediationService, ObjectMapper mapper) {
+    RemediationAgentExecutor(RemediationService remediationService, ObjectMapper mapper) {
         this.remediationService = remediationService;
         this.mapper = mapper;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        executor.shutdown();
     }
 
     @Produces
@@ -62,7 +68,7 @@ public class RemediationAgentExecutor {
 
                 executor.execute(() -> {
                     try {
-                        RemediationResponse response = remediationService.remediate(request);
+                        RemediationResponse response = remediationService.remediate(request, emitter.getTaskId());
                         Log.infof("A2A: remediation finished: %s", response.status());
                         emitter.addArtifact(List.of(new TextPart(mapper.writeValueAsString(response))),
                                 null, "remediation", null);
@@ -76,6 +82,8 @@ public class RemediationAgentExecutor {
 
             @Override
             public void cancel(RequestContext context, AgentEmitter emitter) throws A2AError {
+                Log.infof("A2A: cancelling remediation task %s", emitter.getTaskId());
+                remediationService.cancel(emitter.getTaskId());
                 emitter.cancel();
             }
         };

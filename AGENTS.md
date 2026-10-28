@@ -35,7 +35,7 @@ completes it on a virtual thread when the sandbox finishes.
 sandbox pod: `restricted-v2` SCC, read-only root filesystem, no service-account token,
 zero RBAC, and a namespace EgressFirewall allowing only GitHub, Maven Central, DNS and
 the LLM endpoint. The GitHub token pushed into the sandbox is fine-grained, scoped to a
-single repository with `contents:write` — it can push a branch and nothing else. The
+single repository with `contents:write` — it can push, force-push and delete branches in that repository, open PRs, and nothing else. The
 test suite, not the agent, decides whether a fix is accepted. The PR is reviewed by a
 human; auto-merge is deliberately deferred.
 

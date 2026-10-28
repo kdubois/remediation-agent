@@ -9,7 +9,7 @@ package dev.kevindubois.remediation;
  * @param title         short summary for the PR or issue
  * @param rootCause     root cause from the canary analysis
  * @param analysis      full analysis text from the canary analysis
- * @param errorLogs     canary error logs (stack traces) for the sandbox prompt
+ * @param diagnosticContext rollout context and diagnostics from the analysis prompt
  */
 public record RemediationRequest(
         String repoUrl,
@@ -18,7 +18,7 @@ public record RemediationRequest(
         String title,
         String rootCause,
         String analysis,
-        String errorLogs) {
+        String diagnosticContext) {
 
     public RemediationRequest {
         baseBranch = baseBranch == null || baseBranch.isBlank() ? "main" : baseBranch;

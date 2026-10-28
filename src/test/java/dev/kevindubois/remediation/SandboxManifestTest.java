@@ -15,8 +15,9 @@ class SandboxManifestTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     private final SandboxConfig config = new SandboxConfig(
-            "quay.io/kevindubois/remediation-sandbox:opencode", "opencode", "glm-5",
-            "remediation-agent", "github_token", 1200);
+            "ghcr.io/kdubois/remediation-sandbox:opencode", "remediation", "opencode", "glm-5",
+            "https://llm.example.com/v1", "remediation-agent", "llm_api_key",
+            "remediation-agent", "github_token", 1800);
 
     private final RemediationRequest request = new RemediationRequest(
             "https://github.com/kdubois/demo", "main", "CODE_BUG", "NPE in getStatus",
@@ -50,20 +51,32 @@ class SandboxManifestTest {
         assertThat(podSecurity.get("runAsNonRoot")).isEqualTo(true);
         assertThat(podSecurity.get("fsGroup")).isEqualTo(1001);
 
+        // /tmp must be writable: the JVM, Maven and node all write there
+        var volumes = (java.util.List<Map<String, Object>>) pod.get("volumes");
+        assertThat(volumes.stream().map(v -> v.get("name")))
+                .containsExactlyInAnyOrder("workspace", "agent-home", "tmp");
+        assertThat(volumes).allSatisfy(v -> assertThat(v.get("emptyDir")).isNotNull());
+
         var containers = (java.util.List<Map<String, Object>>) pod.get("containers");
         assertThat(containers).hasSize(1);
         var container = containers.get(0);
-        assertThat(container.get("image")).isEqualTo("quay.io/kevindubois/remediation-sandbox:opencode");
+        assertThat(container.get("image")).isEqualTo("ghcr.io/kdubois/remediation-sandbox:opencode");
 
         var security = (Map<String, Object>) container.get("securityContext");
         assertThat(security.get("allowPrivilegeEscalation")).isEqualTo(false);
         assertThat(security.get("readOnlyRootFilesystem")).isEqualTo(true);
 
-        // the GitHub token must come from a secret reference, never a literal
+        var mounts = (java.util.List<Map<String, Object>>) container.get("volumeMounts");
+        assertThat(mounts.stream().map(m -> m.get("mountPath")))
+                .containsExactlyInAnyOrder("/workspace", "/home/sandbox", "/tmp");
+
+        // both credentials must come from secret references, never literals
         var env = (java.util.List<Map<String, Object>>) container.get("env");
-        var token = env.stream().filter(e -> "GITHUB_TOKEN".equals(e.get("name"))).findFirst().orElseThrow();
-        assertThat(token).doesNotContainKey("value");
-        assertThat((String) token.get("valueFrom").toString()).contains("secretKeyRef");
+        for (String secretName : new String[] { "GITHUB_TOKEN", "LLM_API_KEY" }) {
+            var secretVar = env.stream().filter(e -> secretName.equals(e.get("name"))).findFirst().orElseThrow();
+            assertThat(secretVar).doesNotContainKey("value");
+            assertThat((String) secretVar.get("valueFrom").toString()).contains("secretKeyRef");
+        }
 
         // the remediation prompt is passed through as an env var
         var prompt = env.stream().filter(e -> "REMEDIATION_PROMPT".equals(e.get("name"))).findFirst().orElseThrow();
@@ -72,7 +85,7 @@ class SandboxManifestTest {
 
     @Test
     void omitsBlankModel() throws Exception {
-        var blankModel = new SandboxConfig("img", "opencode", "", "secret", "key", 60);
+        var blankModel = new SandboxConfig("img", "remediation", "opencode", "", null, "s", "k", "secret", "key", 60);
         var manifest = SandboxManifest.build("remediation-test", request, "prompt", blankModel);
 
         var containers = (java.util.List<Map<String, Object>>) podSpec(manifest).get("containers");

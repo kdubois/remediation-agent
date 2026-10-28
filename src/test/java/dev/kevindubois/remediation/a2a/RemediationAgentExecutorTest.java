@@ -43,7 +43,7 @@ class RemediationAgentExecutorTest {
         var response = new RemediationResponse("success", "https://github.com/pr/1", null,
                 "fix/k8s-issue-1", 2, "Tests run: 10, Failures: 0", "remediation-ab", null);
 
-        when(service.remediate(any(RemediationRequest.class))).thenReturn(response);
+        when(service.remediate(any(RemediationRequest.class), any())).thenReturn(response);
         when(context.getMessage()).thenReturn(userMessage(mapper.writeValueAsString(request)));
 
         AtomicReference<String> artifact = new AtomicReference<>();
@@ -62,7 +62,7 @@ class RemediationAgentExecutorTest {
             Thread.sleep(20);
         }
 
-        verify(service).remediate(any(RemediationRequest.class));
+        verify(service).remediate(any(RemediationRequest.class), any());
         verify(emitter).startWork();
         verify(emitter).complete();
         assertThat(artifact.get()).isNotNull();

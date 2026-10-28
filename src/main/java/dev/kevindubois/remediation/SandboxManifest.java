@@ -5,6 +5,7 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.EnvVarSourceBuilder;
+import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.PodSpecBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
@@ -26,10 +27,11 @@ import java.util.UUID;
  * <p>The manifest is constructed deterministically from validated request
  * fields — never from model output — so a hostile analysis result cannot steer
  * the cluster. The pod template applies the full isolation profile: restricted
- * settings, dropped capabilities, read-only root filesystem with emptyDir
- * workspaces, no service-account token, restart policy Never so the wrapper's
- * exit is observable, and the GitHub token injected from a secret reference
- * rather than a literal.
+ * settings, dropped capabilities, read-only root filesystem with sized emptyDir
+ * workspaces (including /tmp — the JVM, Maven and node all write there), no
+ * service-account token, restart policy Never so the wrapper's exit is
+ * observable, and both the GitHub and LLM credentials injected from secret
+ * references rather than literals.
  */
 public final class SandboxManifest {
 
@@ -42,7 +44,7 @@ public final class SandboxManifest {
     /**
      * Builds the Sandbox CR as a plain map, ready to serialize and create.
      *
-     * @param name    sandbox name, also used as the pod name
+     * @param name    sandbox name, also used as the pod name (a controller contract)
      * @param request the validated remediation request
      * @param prompt  remediation prompt passed to the coding agent
      * @param config  sandbox runtime configuration
@@ -54,36 +56,20 @@ public final class SandboxManifest {
                 env("BASE_BRANCH", request.baseBranch()),
                 env("CODING_AGENT", config.codingAgent()),
                 env("REMEDIATION_PROMPT", prompt),
-                tokenEnv("GITHUB_TOKEN", config)));
+                env("COMMIT_TITLE", "Fix: " + (request.title() != null ? request.title() : "canary rollback")),
+                env("ROOT_CAUSE", request.rootCause() == null ? "" : request.rootCause()),
+                secretEnv("GITHUB_TOKEN", config.githubSecretName(), config.githubSecretKey())));
         if (config.model() != null && !config.model().isBlank()) {
             env.add(env("MODEL", config.model()));
         }
+        if (config.llmBaseUrl() != null && !config.llmBaseUrl().isBlank()) {
+            env.add(env("LLM_BASE_URL", config.llmBaseUrl()));
+            env.add(secretEnv("LLM_API_KEY", config.llmSecretName(), config.llmSecretKey()));
+        }
+        // budget for the coding agent itself, below the sandbox's hard timeout
+        env.add(env("AGENT_TIMEOUT_SECONDS", String.valueOf(Math.max(60, config.timeoutSeconds() - 600))));
 
-        var podSecurityContext = new io.fabric8.kubernetes.api.model.PodSecurityContextBuilder()
-                .withRunAsNonRoot(true)
-                .withFsGroup(1001L)
-                .withNewSeccompProfile()
-                .withType("RuntimeDefault")
-                .endSeccompProfile()
-                .build();
-
-        PodSpec podSpec = new PodSpecBuilder()
-                .withRestartPolicy("Never")
-                .withAutomountServiceAccountToken(false)
-                .withSecurityContext(podSecurityContext)
-                .withVolumes(
-                        new VolumeBuilder()
-                                .withName("workspace")
-                                .withNewEmptyDir()
-                                .endEmptyDir()
-                                .build(),
-                        new VolumeBuilder()
-                                .withName("agent-home")
-                                .withNewEmptyDir()
-                                .endEmptyDir()
-                                .build())
-                .withContainers(container(config, env))
-                .build();
+        PodSpec podSpec = podSpec(config, env);
 
         Log.infof("Built sandbox manifest %s for %s", name, request.repoUrl());
 
@@ -102,7 +88,37 @@ public final class SandboxManifest {
     }
 
     public static String newSandboxName() {
-        return "remediation-" + UUID.randomUUID().toString().substring(0, 8);
+        return "remediation-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private static PodSpec podSpec(SandboxConfig config, List<EnvVar> env) {
+        var podSecurityContext = new PodSecurityContextBuilder()
+                .withRunAsNonRoot(true)
+                .withFsGroup(1001L)
+                .withNewSeccompProfile()
+                .withType("RuntimeDefault")
+                .endSeccompProfile()
+                .build();
+
+        return new PodSpecBuilder()
+                .withRestartPolicy("Never")
+                .withAutomountServiceAccountToken(false)
+                .withSecurityContext(podSecurityContext)
+                .withVolumes(
+                        sizedVolume("workspace", "2Gi"),
+                        sizedVolume("agent-home", "2Gi"),
+                        sizedVolume("tmp", "1Gi"))
+                .withContainers(container(config, env))
+                .build();
+    }
+
+    private static io.fabric8.kubernetes.api.model.Volume sizedVolume(String name, String size) {
+        return new VolumeBuilder()
+                .withName(name)
+                .withNewEmptyDir()
+                .withSizeLimit(new Quantity(size))
+                .endEmptyDir()
+                .build();
     }
 
     private static Container container(SandboxConfig config, List<EnvVar> env) {
@@ -116,7 +132,8 @@ public final class SandboxManifest {
                 .endResources()
                 .withVolumeMounts(
                         new VolumeMountBuilder().withName("workspace").withMountPath("/workspace").build(),
-                        new VolumeMountBuilder().withName("agent-home").withMountPath("/home/sandbox").build())
+                        new VolumeMountBuilder().withName("agent-home").withMountPath("/home/sandbox").build(),
+                        new VolumeMountBuilder().withName("tmp").withMountPath("/tmp").build())
                 .withNewSecurityContext()
                 .withAllowPrivilegeEscalation(false)
                 .withReadOnlyRootFilesystem(true)
@@ -131,11 +148,11 @@ public final class SandboxManifest {
         return new EnvVarBuilder().withName(name).withValue(value == null ? "" : value).build();
     }
 
-    private static EnvVar tokenEnv(String name, SandboxConfig config) {
+    private static EnvVar secretEnv(String name, String secretName, String secretKey) {
         return new EnvVarBuilder()
                 .withName(name)
                 .withValueFrom(new EnvVarSourceBuilder()
-                        .withNewSecretKeyRef(config.githubSecretName(), config.githubSecretKey(), false)
+                        .withNewSecretKeyRef(secretName, secretKey, false)
                         .build())
                 .build();
     }
