@@ -42,7 +42,7 @@ public class SandboxConfigProducer {
     @ConfigProperty(name = "remediation.sandbox.github-secret-key", defaultValue = "github_token")
     String githubSecretKey;
 
-    @ConfigProperty(name = "remediation.sandbox.timeout-seconds", defaultValue = "1800")
+    @ConfigProperty(name = "remediation.sandbox.timeout-seconds", defaultValue = "2400")
     int timeoutSeconds;
 
     @ConfigProperty(name = "remediation.sandbox.keep-failed", defaultValue = "false")

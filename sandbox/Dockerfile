@@ -29,6 +29,13 @@ RUN curl -fsSL https://opencode.ai/v2/install | bash -s -- --version 2.2.0 \
 USER 1001
 WORKDIR /workspace
 
+# Pre-bake the Maven repository for the demo project so sandbox runs do not
+# spend minutes downloading dependencies through the egress allow-list.
+# Refresh by updating pom-demo.xml when the demo project's dependencies change.
+COPY --chown=1001:0 pom-demo.xml /tmp/pom-demo.xml
+RUN mvn -q -f /tmp/pom-demo.xml dependency:go-offline || true \
+    && rm /tmp/pom-demo.xml
+
 COPY --chmod=755 run-agent.sh /usr/local/bin/run-agent.sh
 
 ENTRYPOINT ["/usr/local/bin/run-agent.sh"]

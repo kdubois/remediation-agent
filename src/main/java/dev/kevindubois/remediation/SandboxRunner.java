@@ -67,7 +67,9 @@ public class SandboxRunner {
                 log = readLog(name);
             }
         } finally {
-            if (observed && log != null && config.keepFailedSandboxes() && parseResult(log) == null) {
+            SandboxResult result = log == null ? null : parseResult(log);
+            boolean failed = result == null || !"success".equals(result.status());
+            if (observed && log != null && config.keepFailedSandboxes() && failed) {
                 Log.warnf("Keeping failed sandbox %s for inspection", name);
             } else {
                 delete(name);
