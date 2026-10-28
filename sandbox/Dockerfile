@@ -26,6 +26,11 @@ RUN curl -fsSL https://opencode.ai/v2/install | bash -s -- --version 2.2.0 \
     && mv /root/.opencode/bin/opencode /usr/local/bin/opencode \
     && test -x /usr/local/bin/opencode
 
+# Java 25 is the project's toolchain: make it the default for mvn, mvnw and
+# the coding agent's shells — the RHEL default java on PATH is 17, which fails
+# with UnsupportedClassVersionError on class file version 69.
+ENV JAVA_HOME=/usr/lib/jvm/java-25
+
 USER 1001
 WORKDIR /workspace
 
