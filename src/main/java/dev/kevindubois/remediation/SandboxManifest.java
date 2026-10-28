@@ -154,7 +154,10 @@ public final class SandboxManifest {
         return new EnvVarBuilder()
                 .withName(name)
                 .withValueFrom(new EnvVarSourceBuilder()
-                        .withNewSecretKeyRef(secretName, secretKey, false)
+                        .withNewSecretKeyRef()
+                        .withName(secretName)
+                        .withKey(secretKey)
+                        .endSecretKeyRef()
                         .build())
                 .build();
     }

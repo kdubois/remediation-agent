@@ -71,13 +71,20 @@ class SandboxManifestTest {
         assertThat(mounts.stream().map(m -> m.get("mountPath")))
                 .containsExactlyInAnyOrder("/workspace", "/home/sandbox", "/tmp");
 
-        // both credentials must come from secret references, never literals
+        // both credentials must come from secret references, never literals,
+        // with the secret name and key in the right fields
         var env = (java.util.List<Map<String, Object>>) container.get("env");
-        for (String secretName : new String[] { "GITHUB_TOKEN", "LLM_API_KEY" }) {
-            var secretVar = env.stream().filter(e -> secretName.equals(e.get("name"))).findFirst().orElseThrow();
-            assertThat(secretVar).doesNotContainKey("value");
-            assertThat((String) secretVar.get("valueFrom").toString()).contains("secretKeyRef");
-        }
+        var githubVar = env.stream().filter(e -> "GITHUB_TOKEN".equals(e.get("name"))).findFirst().orElseThrow();
+        assertThat(githubVar).doesNotContainKey("value");
+        var githubRef = (Map<String, Object>) ((Map<String, Object>) githubVar.get("valueFrom")).get("secretKeyRef");
+        assertThat(githubRef.get("name")).isEqualTo("remediation-agent");
+        assertThat(githubRef.get("key")).isEqualTo("github_token");
+
+        var llmVar = env.stream().filter(e -> "LLM_API_KEY".equals(e.get("name"))).findFirst().orElseThrow();
+        assertThat(llmVar).doesNotContainKey("value");
+        var llmRef = (Map<String, Object>) ((Map<String, Object>) llmVar.get("valueFrom")).get("secretKeyRef");
+        assertThat(llmRef.get("name")).isEqualTo("remediation-agent");
+        assertThat(llmRef.get("key")).isEqualTo("llm_api_key");
 
         // the remediation prompt is passed through as an env var
         var prompt = env.stream().filter(e -> "REMEDIATION_PROMPT".equals(e.get("name"))).findFirst().orElseThrow();
