@@ -52,6 +52,10 @@ public final class SandboxManifest {
     public static Map<String, Object> build(String name, RemediationRequest request, String prompt,
             SandboxConfig config) {
         List<EnvVar> env = new ArrayList<>(List.of(
+                // OpenShift runs the pod as a random UID with no passwd entry:
+                // without an explicit HOME, tools resolve it to / and fail on
+                // the read-only root filesystem
+                env("HOME", "/home/sandbox"),
                 env("REPO_URL", request.repoUrl()),
                 env("BASE_BRANCH", request.baseBranch()),
                 env("CODING_AGENT", config.codingAgent()),

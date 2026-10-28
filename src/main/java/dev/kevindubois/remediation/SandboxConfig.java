@@ -13,7 +13,8 @@ package dev.kevindubois.remediation;
  * @param llmSecretKey     key of the LLM API key inside that secret
  * @param githubSecretName secret holding the GitHub token the sandbox uses to push
  * @param githubSecretKey  key of the token inside that secret
- * @param timeoutSeconds   hard limit for one sandbox run
+ * @param timeoutSeconds      hard limit for one sandbox run
+ * @param keepFailedSandboxes keep sandboxes that produced no result, for log inspection
  */
 public record SandboxConfig(
         String image,
@@ -25,5 +26,6 @@ public record SandboxConfig(
         String llmSecretKey,
         String githubSecretName,
         String githubSecretKey,
-        int timeoutSeconds) {
+        int timeoutSeconds,
+        boolean keepFailedSandboxes) {
 }

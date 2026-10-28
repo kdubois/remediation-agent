@@ -45,11 +45,15 @@ public class SandboxConfigProducer {
     @ConfigProperty(name = "remediation.sandbox.timeout-seconds", defaultValue = "1800")
     int timeoutSeconds;
 
+    @ConfigProperty(name = "remediation.sandbox.keep-failed", defaultValue = "false")
+    boolean keepFailedSandboxes;
+
     @Produces
     @Singleton
     SandboxConfig sandboxConfig() {
         Log.infof("Sandbox config: image=%s, agent=%s, namespace=%s", image, codingAgent, namespace);
         return new SandboxConfig(image, namespace, codingAgent, model.orElse(null), llmBaseUrl.orElse(null),
-                llmSecretName, llmSecretKey, githubSecretName, githubSecretKey, timeoutSeconds);
+                llmSecretName, llmSecretKey, githubSecretName, githubSecretKey, timeoutSeconds,
+                keepFailedSandboxes);
     }
 }

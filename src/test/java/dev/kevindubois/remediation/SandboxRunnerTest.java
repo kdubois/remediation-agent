@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SandboxRunnerTest {
 
     private final SandboxRunner runner = new SandboxRunner(null, new ObjectMapper(),
-            new SandboxConfig("img", "remediation", "opencode", null, null, "s", "k", "secret", "key", 60));
+            new SandboxConfig("img", "remediation", "opencode", null, null, "s", "k", "secret", "key", 60, false));
 
     @Test
     void parsesResultFromLastJsonLine() {

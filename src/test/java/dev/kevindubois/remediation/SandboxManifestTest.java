@@ -17,7 +17,7 @@ class SandboxManifestTest {
     private final SandboxConfig config = new SandboxConfig(
             "ghcr.io/kdubois/remediation-sandbox:opencode", "remediation", "opencode", "glm-5",
             "https://llm.example.com/v1", "remediation-agent", "llm_api_key",
-            "remediation-agent", "github_token", 1800);
+            "remediation-agent", "github_token", 1800, false);
 
     private final RemediationRequest request = new RemediationRequest(
             "https://github.com/kdubois/demo", "main", "CODE_BUG", "NPE in getStatus",
@@ -93,7 +93,7 @@ class SandboxManifestTest {
 
     @Test
     void omitsBlankModel() throws Exception {
-        var blankModel = new SandboxConfig("img", "remediation", "opencode", "", null, "s", "k", "secret", "key", 60);
+        var blankModel = new SandboxConfig("img", "remediation", "opencode", "", null, "s", "k", "secret", "key", 60, false);
         var manifest = SandboxManifest.build("remediation-test", request, "prompt", blankModel);
 
         var containers = (java.util.List<Map<String, Object>>) podSpec(manifest).get("containers");

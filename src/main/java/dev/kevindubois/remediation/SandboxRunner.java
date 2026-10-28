@@ -38,6 +38,10 @@ public class SandboxRunner {
      * Runs the remediation sandbox. Blocks until the wrapper finishes or the
      * timeout expires — callers decide whether to wait on their own threads.
      *
+     * <p>When {@code config.keepFailedSandboxes()} is set and the run produces
+     * no result, the sandbox is left in place so its pod logs can be
+     * inspected; shutdownPolicy Delete still cleans it up eventually.
+     *
      * @return the wrapper result, or null when the sandbox could not be
      *         created, observed or read
      */
@@ -55,20 +59,26 @@ public class SandboxRunner {
             return null;
         }
 
+        boolean observed = false;
+        String log = null;
         try {
-            if (!awaitPod(name)) {
-                return null;
+            observed = awaitPod(name);
+            if (observed) {
+                log = readLog(name);
             }
-            String log = readLog(name);
-            if (log == null) {
-                return null;
-            }
-            SandboxResult result = parseResult(log);
-            Log.infof("Sandbox %s finished: %s", name, result == null ? "no result" : result.status());
-            return result;
         } finally {
-            delete(name);
+            if (observed && log != null && config.keepFailedSandboxes() && parseResult(log) == null) {
+                Log.warnf("Keeping failed sandbox %s for inspection", name);
+            } else {
+                delete(name);
+            }
         }
+        if (log == null) {
+            return null;
+        }
+        SandboxResult result = parseResult(log);
+        Log.infof("Sandbox %s finished: %s", name, result == null ? "no result" : result.status());
+        return result;
     }
 
     /** Deletes a running sandbox, used by A2A task cancellation. */
