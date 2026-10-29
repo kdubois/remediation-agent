@@ -14,7 +14,7 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 
 ARG CODING_AGENT=opencode
 
-RUN microdnf install -y git java-25-openjdk-devel maven openssl tar \
+RUN microdnf install -y git java-25-openjdk-devel maven openssl tar unzip \
     && microdnf clean all \
     && useradd -m -u 1001 sandbox
 
