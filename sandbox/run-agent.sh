@@ -151,7 +151,7 @@ PUSH_TOKEN=$GITHUB_TOKEN
 # function and the variables it reads, then run it through bash -c
 export -f run_agent
 export CODING_AGENT MODEL PROMPT_FILE
-if ! timeout "$AGENT_TIMEOUT_SECONDS" bash -c run_agent > "$WORKDIR/agent.log" 2>&1; then
+if ! timeout "$AGENT_TIMEOUT_SECONDS" bash -c run_agent 2>&1 | tee "$WORKDIR/agent.log"; then
   log "coding agent exited non-zero or timed out after ${AGENT_TIMEOUT_SECONDS}s, see agent.log"
   tail -50 "$WORKDIR/agent.log" | strip_ansi >&2 || true
   fail agent_error

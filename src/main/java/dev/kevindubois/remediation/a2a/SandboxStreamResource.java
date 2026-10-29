@@ -53,14 +53,16 @@ public class SandboxStreamResource {
 
     /**
      * The sandbox pod currently Pending or Running, if any. The most
-     * recently created one wins when several are racing.
+     * recently created one wins when several are racing. The remediation
+     * namespace is dedicated to sandbox pods, so the name prefix
+     * identifies them (the Sandbox CR's labels do not propagate to pods).
      */
     @GET
     @Path("/active")
     @Produces(MediaType.APPLICATION_JSON)
     public ActiveSandbox active() {
         return client.pods().inNamespace(config.namespace()).list().getItems().stream()
-                .filter(this::isSandboxPod)
+                .filter(p -> p.getMetadata().getName().startsWith("remediation-"))
                 .filter(p -> {
                     String phase = p.getStatus() != null ? p.getStatus().getPhase() : "";
                     return "Running".equals(phase) || "Pending".equals(phase);
@@ -147,11 +149,6 @@ public class SandboxStreamResource {
         }
         String phase = pod.getStatus().getPhase();
         return "Succeeded".equals(phase) || "Failed".equals(phase);
-    }
-
-    private boolean isSandboxPod(Pod pod) {
-        var labels = pod.getMetadata().getLabels();
-        return labels != null && "remediation-agent".equals(labels.get("app"));
     }
 
     private Pod newer(Pod a, Pod b) {
