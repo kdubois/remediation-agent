@@ -90,10 +90,14 @@ Fix the bug described below in this repository.
 $REMEDIATION_PROMPT
 
 ## Rules
+- Work fast and decisively: go straight to the file in the stack trace, fix it, stop.
+  Only explore further if the fix is genuinely unclear from the trace and root cause.
 - Make the minimal change that fixes the bug. Do not refactor unrelated code.
 - Do not modify build files (pom.xml, mvnw, .mvn), CI configuration, or dependencies.
 - You may add new test files, but do not change existing tests.
-- Run the test suite and make sure it passes before you finish.
+- Do NOT run the test suite — the harness verifies your fix independently after you
+  finish, so a full test run wastes several minutes for nothing. If you want a sanity
+  check, compile the touched file only.
 - Summarize your change in one sentence when you are done.
 EOF
 

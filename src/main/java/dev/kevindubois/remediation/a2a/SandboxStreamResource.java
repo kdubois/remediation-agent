@@ -106,9 +106,15 @@ public class SandboxStreamResource {
                     String type = node.path("type").asText();
                     if ("tool_use".equals(type)) {
                         var input = node.path("part").path("state").path("input");
-                        String text = firstNonBlank(input.path("command").asText(),
-                                input.path("filePath").asText(), "tool call");
-                        events.add(event("tool", truncate(text, 160)));
+                        String tool = node.path("part").path("tool").asText("");
+                        String target = firstNonBlank(input.path("command").asText(),
+                                input.path("filePath").asText(), input.path("path").asText(),
+                                input.path("pattern").asText(), input.path("file").asText(),
+                                input.path("glob").asText());
+                        String text = target.isBlank() ? tool : tool + " " + truncate(target, 140);
+                        if (!text.isBlank()) {
+                            events.add(event("tool", text));
+                        }
                     } else if ("text".equals(type)) {
                         String text = node.path("part").path("text").asText().strip();
                         if (!text.isBlank()) {

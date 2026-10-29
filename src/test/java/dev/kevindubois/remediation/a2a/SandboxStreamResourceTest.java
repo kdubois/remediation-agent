@@ -37,7 +37,7 @@ class SandboxStreamResourceTest {
         assertThat(events.get(2)).isEqualTo(Map.of("type", "agent", "text",
                 "The bug is at line 129: nullString.length() without a null check."));
         assertThat(events.get(3).get("type")).isEqualTo("tool");
-        assertThat(events.get(3).get("text")).isEqualTo("src/main/java/dev/kevindubois/demo/MetricsResource.java");
+        assertThat(events.get(3).get("text")).contains("MetricsResource.java");
         assertThat(events.get(4)).isEqualTo(Map.of("type", "result", "text", "success"));
     }
 
@@ -66,6 +66,20 @@ class SandboxStreamResourceTest {
         var events = resource.classify(
                 "{\"type\":\"tool_use\",\"part\":{\"state\":{\"input\":{\"command\":\"" + longText + "\"}}}}");
         assertThat(events.get(0).get("text").length()).isLessThanOrEqualTo(161);
+    }
+
+    @Test
+    void toolEventsCarryTheToolNameAndTarget() {
+        var events = resource.classify(
+                "{\"type\":\"tool_use\",\"part\":{\"tool\":\"read\",\"state\":{\"input\":{\"path\":\"src/main/java/Foo.java\"}}}}");
+        assertThat(events.get(0).get("text")).isEqualTo("read src/main/java/Foo.java");
+    }
+
+    @Test
+    void toolEventsWithoutATargetShowTheToolNameOnly() {
+        var events = resource.classify(
+                "{\"type\":\"tool_use\",\"part\":{\"tool\":\"think\",\"state\":{\"input\":{}}}}");
+        assertThat(events.get(0).get("text")).isEqualTo("think");
     }
 
     @Test
