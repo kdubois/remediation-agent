@@ -24,7 +24,7 @@ kubernetes-agent (analysis decides promote=false)
             └─ watches sandbox → opens PR with verification evidence, or a GitHub issue
 ```
 
-**A2A protocol.** A2A Java SDK 1.3.x (the generation the LangChain4j A2A client
+**A2A protocol.** A2A Java SDK 1.4.x (the generation the LangChain4j A2A client
 speaks). The agent card is served at `/.well-known/agent-card.json`; JSON-RPC
 `SendMessage` at `/` with the `A2A-Version: 1.0` header. Message text is a JSON
 `RemediationRequest`; the response artifact is a JSON `RemediationResponse`.
