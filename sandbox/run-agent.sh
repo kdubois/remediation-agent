@@ -24,10 +24,15 @@
 #
 # Output: a single JSON object on stdout, the last line of the log.
 #
-# Security note: the GitHub token is unset while the coding agent runs and
-# re-injected only for the clone and the push. This stops accidental
-# discovery (env dumps, logs); it is not a security boundary — the agent
-# shares the UID and could recover it from git if it tried.
+# Security note: the coding agent runs with GITHUB_TOKEN and LLM_API_KEY
+# stripped from its environment. The LLM key reaches it only through the
+# opencode.json written before launch, and the GitHub token is re-injected
+# only for the clone and the push. This stops accidental discovery (env
+# dumps, logs); it is not a security boundary — the agent shares the
+# container's UID, so /proc/1/environ still carries the execve-time
+# environment. That cannot be closed while the push and the agent share one
+# container; the namespace EgressFirewall (GitHub, Maven Central, DNS and
+# the LLM endpoint only) is the compensating control.
 set -euo pipefail
 
 REPO_URL=${REPO_URL:?REPO_URL is required}
@@ -149,17 +154,24 @@ run_agent() {
   esac
 }
 
+# Write the LLM config first: the on-disk opencode.json is how the sandboxed
+# agent authenticates to the LLM, so the API key never needs to be in its
+# environment. PUSH_TOKEN is a plain shell variable, not exported, so the
+# agent cannot see it either.
 configure_llm
 PUSH_TOKEN=$GITHUB_TOKEN
 # timeout(1) runs an executable, not a shell function: export both the
-# function and the variables it reads, then run it through bash -c
+# function and the variables it reads, then run it through bash -c with the
+# credentials stripped from the environment
 export -f run_agent
 export CODING_AGENT MODEL PROMPT_FILE
-if ! timeout "$AGENT_TIMEOUT_SECONDS" bash -c run_agent 2>&1 | tee "$WORKDIR/agent.log"; then
+if ! timeout "$AGENT_TIMEOUT_SECONDS" env -u GITHUB_TOKEN -u LLM_API_KEY bash -c run_agent 2>&1 | tee "$WORKDIR/agent.log"; then
   log "coding agent exited non-zero or timed out after ${AGENT_TIMEOUT_SECONDS}s, see agent.log"
   tail -50 "$WORKDIR/agent.log" | strip_ansi >&2 || true
   fail agent_error
 fi
+# Drop the credentials from the wrapper's remaining steps too (the test run
+# would inherit them otherwise); the push re-injects the saved PUSH_TOKEN.
 unset GITHUB_TOKEN LLM_API_KEY
 
 # --- Reject tampering with the verification harness --------------------------

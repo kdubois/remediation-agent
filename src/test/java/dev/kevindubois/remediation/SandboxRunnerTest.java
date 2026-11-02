@@ -1,12 +1,23 @@
 package dev.kevindubois.remediation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.MixedOperation;
+import io.fabric8.kubernetes.client.dsl.NonNamespaceOperation;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
- * Verifies the result-JSON extraction from sandbox pod logs.
+ * Verifies the result-JSON extraction from sandbox pod logs, and the
+ * failure reason reported when a sandbox never finishes.
  */
 class SandboxRunnerTest {
 
@@ -47,5 +58,39 @@ class SandboxRunnerTest {
         assertThat(result).isNotNull();
         assertThat(result.status()).isEqualTo("tests_failed");
         assertThat(result.success()).isFalse();
+    }
+
+    @Test
+    void reportsTimeoutWhenThePodNeverReachesATerminalPhase() {
+        // timeoutSeconds 0 expires the deadline immediately, so the pod poll
+        // loop never runs; the mocked client accepts the create and delete
+        var client = mock(KubernetesClient.class);
+        var resource = fakeSandboxOperations(client);
+        var config = new SandboxConfig("img", "remediation", "opencode", null, null,
+                "llm-secret", "key", "gh-secret", "key", 0, false);
+        var runner = new SandboxRunner(client, new ObjectMapper(), config);
+        var request = new RemediationRequest(
+                "https://github.com/kdubois/argo-rollouts-quarkus-demo", "main", "CODE_BUG",
+                "NPE in getStatus", "null dereference", "error rate spiked", "trace");
+
+        var outcome = runner.run("remediation-timeout-test", request, "prompt");
+
+        assertThat(outcome).isEqualTo(SandboxOutcome.failed(SandboxOutcome.Reason.TIMEOUT));
+        // a timed-out sandbox is deleted, not kept — the pod may still be running
+        verify(resource).delete();
+    }
+
+    /** Wires the genericKubernetesResources fluent chain the runner uses for create and delete. */
+    @SuppressWarnings("unchecked")
+    private static Resource<GenericKubernetesResource> fakeSandboxOperations(KubernetesClient client) {
+        var sandboxes = mock(MixedOperation.class);
+        var namespaced = mock(NonNamespaceOperation.class);
+        var resource = mock(Resource.class);
+        when(client.genericKubernetesResources(SandboxManifest.API_VERSION, SandboxManifest.KIND))
+                .thenReturn(sandboxes);
+        when(sandboxes.inNamespace(anyString())).thenReturn(namespaced);
+        when(namespaced.resource(any(GenericKubernetesResource.class))).thenReturn(resource);
+        when(namespaced.withName(anyString())).thenReturn(resource);
+        return resource;
     }
 }

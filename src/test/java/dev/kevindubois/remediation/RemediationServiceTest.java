@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Verifies the remediation orchestration with a faked sandbox runner and
  * GitHub client: allow-list enforcement and normalization, PR on verified
  * success, issue on failure and for operational problems, distinct statuses
- * for infrastructure errors and PR-creation failures.
+ * for infrastructure errors, timeouts and PR-creation failures.
  */
 class RemediationServiceTest {
 
@@ -46,7 +46,7 @@ class RemediationServiceTest {
         for (String url : new String[] {
                 REPO + "/", REPO + ".git", REPO + ".git/",
                 "https://github.com/KDUBOIS/argo-rollouts-quarkus-demo" }) {
-            sandbox.next = new SandboxResult("no_changes", null, 0, null, null, 0);
+            sandbox.next = SandboxOutcome.completed(new SandboxResult("no_changes", null, 0, null, null, 0));
             var response = service.remediate(new RemediationRequest(url, "main", "CODE_BUG", null, "r", "a", null));
             assertThat(response.status()).as(url).isNotEqualTo("rejected");
         }
@@ -62,8 +62,8 @@ class RemediationServiceTest {
 
     @Test
     void opensPrWithEvidenceOnVerifiedSuccess() {
-        sandbox.next = new SandboxResult("success", "fix/k8s-issue-1", 2,
-                "Tests run: 10, Failures: 0", "glm-5", 222);
+        sandbox.next = SandboxOutcome.completed(new SandboxResult("success", "fix/k8s-issue-1", 2,
+                "Tests run: 10, Failures: 0", "glm-5", 222));
 
         var response = service.remediate(request("CODE_BUG"));
 
@@ -81,7 +81,7 @@ class RemediationServiceTest {
 
     @Test
     void prBodyRendersDashForNullFields() {
-        sandbox.next = new SandboxResult("success", "fix/x", 1, null, null, 5);
+        sandbox.next = SandboxOutcome.completed(new SandboxResult("success", "fix/x", 1, null, null, 5));
         service.remediate(new RemediationRequest(REPO, "main", "CODE_BUG", null, null, null, null));
 
         assertThat(github.lastPullRequestBody).doesNotContain("null");
@@ -90,7 +90,7 @@ class RemediationServiceTest {
 
     @Test
     void reportsPrFailedWhenPrCreationFailsAfterVerifiedFix() {
-        sandbox.next = new SandboxResult("success", "fix/k8s-issue-1", 1, "Tests run: 1, Failures: 0", "m", 5);
+        sandbox.next = SandboxOutcome.completed(new SandboxResult("success", "fix/k8s-issue-1", 1, "Tests run: 1, Failures: 0", "m", 5));
         github.failPullRequests = true;
 
         var response = service.remediate(request("CODE_BUG"));
@@ -102,7 +102,7 @@ class RemediationServiceTest {
 
     @Test
     void opensIssueWhenTestsFail() {
-        sandbox.next = new SandboxResult("tests_failed", "fix/x", 1, null, "glm-5", 60);
+        sandbox.next = SandboxOutcome.completed(new SandboxResult("tests_failed", "fix/x", 1, null, "glm-5", 60));
 
         var response = service.remediate(request("CODE_BUG"));
 
@@ -114,13 +114,41 @@ class RemediationServiceTest {
 
     @Test
     void infrastructureFailureDoesNotOpenIssue() {
-        sandbox.next = null;
+        sandbox.next = SandboxOutcome.failed(SandboxOutcome.Reason.CREATE_FAILED);
 
         var response = service.remediate(request("CODE_BUG"));
 
         assertThat(response.status()).isEqualTo("infra_error");
+        assertThat(response.message()).contains("could not be created");
         assertThat(github.issuesCreated).isZero();
         assertThat(github.pullsCreated).isZero();
+    }
+
+    @Test
+    void timeoutIsReportedAsADistinctStatus() {
+        sandbox.next = SandboxOutcome.failed(SandboxOutcome.Reason.TIMEOUT);
+
+        var response = service.remediate(request("CODE_BUG"));
+
+        assertThat(response.status()).isEqualTo("timeout");
+        assertThat(response.message()).contains("timed out");
+        assertThat(response.sandbox()).isNotNull();
+        assertThat(github.issuesCreated).isZero();
+        assertThat(github.pullsCreated).isZero();
+    }
+
+    @Test
+    void infraFailureReasonsKeepDistinctMessages() {
+        for (SandboxOutcome.Reason reason : new SandboxOutcome.Reason[] {
+                SandboxOutcome.Reason.CREATE_FAILED, SandboxOutcome.Reason.LOG_UNREADABLE,
+                SandboxOutcome.Reason.NO_RESULT }) {
+            sandbox.next = SandboxOutcome.failed(reason);
+
+            var response = service.remediate(request("CODE_BUG"));
+
+            assertThat(response.status()).as(reason.name()).isEqualTo("infra_error");
+            assertThat(response.message()).as(reason.name()).isNotBlank();
+        }
     }
 
     @Test
@@ -161,14 +189,14 @@ class RemediationServiceTest {
     private static final class FakeSandboxRunner extends SandboxRunner {
         boolean ran;
         boolean cancelled;
-        SandboxResult next;
+        SandboxOutcome next;
 
         FakeSandboxRunner() {
             super(null, null, null);
         }
 
         @Override
-        public SandboxResult run(String name, RemediationRequest request, String prompt) {
+        public SandboxOutcome run(String name, RemediationRequest request, String prompt) {
             ran = true;
             return next;
         }

@@ -36,6 +36,11 @@ sandbox pod: `restricted-v2` SCC, read-only root filesystem, no service-account 
 zero RBAC, and a namespace EgressFirewall allowing only GitHub, Maven Central, DNS and
 the LLM endpoint. The GitHub token pushed into the sandbox is fine-grained, scoped to a
 single repository with `contents:write` — it can push, force-push and delete branches in that repository, open PRs, and nothing else. The
+agent itself runs with `GITHUB_TOKEN` and `LLM_API_KEY` stripped from its environment:
+the LLM key reaches it through an on-disk `opencode.json` written before launch, and
+the push step re-injects the saved token. The residual `/proc/1/environ` exposure is
+accepted — it cannot be closed while the push and the agent share one container; the
+EgressFirewall is the compensating control. The
 test suite, not the agent, decides whether a fix is accepted. The PR is reviewed by a
 human; auto-merge is deliberately deferred.
 

@@ -39,7 +39,10 @@ service-account token, zero RBAC, and a namespace EgressFirewall that allows
 only GitHub, Maven Central, npm, DNS and the LLM endpoint. The GitHub token it
 receives is fine-grained to a single repository with `contents:write` and
 `pull_requests:write` — it can push branches, open, force-push and delete
-branches in that repository, and nothing else. The test suite, not the agent,
+branches in that repository, and nothing else. The coding agent itself runs
+with `GITHUB_TOKEN` and `LLM_API_KEY` stripped from its environment: the LLM
+key reaches it through an on-disk `opencode.json` written before launch, and
+the push step re-injects the saved token. The test suite, not the agent,
 decides whether a fix ships, and the wrapper rejects runs that modify build
 files or existing tests. A human reviews every PR; auto-merge is deliberately
 deferred.
@@ -60,6 +63,20 @@ next to the kubernetes-agent that calls it, sandbox pods run in the dedicated
 `remediation` namespace with the EgressFirewall described above. The
 `remediation-agent` secret (`github_token`, `llm_api_key`) is created manually in
 both namespaces — see the kustomization note.
+
+## Security
+
+The service is unauthenticated by design. It runs as a ClusterIP service in
+`openshift-gitops`, so only in-cluster callers can reach it, and those callers
+are trusted — the A2A endpoint runs with `a2a.authorization.required=false`
+and there is no JWT, OIDC or request filter anywhere in the service. Within
+that boundary the service exposes the A2A remediate skill and the sandbox
+endpoints (`GET /sandbox/active`, `GET /sandbox/{name}/log`), which serve the
+coding agent's log — anything it printed, including repository content it
+read. The sandbox namespace adds a deny-all-ingress NetworkPolicy, so sandbox
+pods accept no inbound connections. If the in-cluster trust assumption ever
+breaks, authentication has to be added to the whole service, not to a single
+endpoint.
 
 ## Swapping the coding agent
 

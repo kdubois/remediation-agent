@@ -16,9 +16,10 @@ import jakarta.inject.Inject;
  *
  * <p>The pod name equals the Sandbox CR name — a contract of the Agent
  * Sandbox controller (it sets an agents.x-k8s.io/pod-name annotation only as
- * a legacy fallback). Infrastructure failures (no namespace, bad image, RBAC,
- * missing pod) return null so the caller can report an infra error rather
- * than a remediation outcome.
+ * a legacy fallback). Infrastructure failures (no namespace, bad image,
+ * RBAC, missing pod, timeout) return a {@link SandboxOutcome.Failed}
+ * carrying the reason, so the caller can report them distinctly rather
+ * than as a remediation outcome.
  */
 @ApplicationScoped
 public class SandboxRunner {
@@ -38,14 +39,13 @@ public class SandboxRunner {
      * Runs the remediation sandbox. Blocks until the wrapper finishes or the
      * timeout expires — callers decide whether to wait on their own threads.
      *
-     * <p>When {@code config.keepFailedSandboxes()} is set and the run produces
-     * no result, the sandbox is left in place so its pod logs can be
-     * inspected; shutdownPolicy Delete still cleans it up eventually.
+     * <p>When {@code config.keepFailedSandboxes()} is set and the run ends in
+     * a failure the pod logs could explain, the sandbox is left in place for
+     * inspection; shutdownPolicy Delete still cleans it up eventually.
      *
-     * @return the wrapper result, or null when the sandbox could not be
-     *         created, observed or read
+     * @return the wrapper result, or the reason none could be produced
      */
-    public SandboxResult run(String name, RemediationRequest request, String prompt) {
+    public SandboxOutcome run(String name, RemediationRequest request, String prompt) {
         var sandbox = Serialization.unmarshal(
                 toJson(SandboxManifest.build(name, request, prompt, config)),
                 io.fabric8.kubernetes.api.model.GenericKubernetesResource.class);
@@ -56,31 +56,42 @@ public class SandboxRunner {
                     .create();
         } catch (Exception e) {
             Log.errorf(e, "Failed to create sandbox %s", name);
-            return null;
+            return SandboxOutcome.failed(SandboxOutcome.Reason.CREATE_FAILED);
         }
 
-        boolean observed = false;
-        String log = null;
-        try {
-            observed = awaitPod(name);
-            if (observed) {
-                log = readLog(name);
-            }
-        } finally {
-            SandboxResult result = log == null ? null : parseResult(log);
-            boolean failed = result == null || !"success".equals(result.status());
-            if (observed && log != null && config.keepFailedSandboxes() && failed) {
-                Log.warnf("Keeping failed sandbox %s for inspection", name);
+        SandboxOutcome outcome;
+        if (!awaitPod(name)) {
+            outcome = SandboxOutcome.failed(SandboxOutcome.Reason.TIMEOUT);
+        } else {
+            String log = readLog(name);
+            if (log == null) {
+                outcome = SandboxOutcome.failed(SandboxOutcome.Reason.LOG_UNREADABLE);
             } else {
-                delete(name);
+                SandboxResult result = parseResult(log);
+                outcome = result == null
+                        ? SandboxOutcome.failed(SandboxOutcome.Reason.NO_RESULT)
+                        : SandboxOutcome.completed(result);
             }
         }
-        if (log == null) {
-            return null;
+
+        // keepFailedSandboxes applies to runs that ended with a log worth
+        // inspecting: a failed result, or a log with no result JSON in it.
+        // Timeouts and unreadable logs are deleted — the pod may still be
+        // running and burning resources.
+        boolean keep = config.keepFailedSandboxes() && switch (outcome) {
+            case SandboxOutcome.Completed c -> !c.result().success();
+            case SandboxOutcome.Failed f -> f.reason() == SandboxOutcome.Reason.NO_RESULT;
+        };
+        if (keep) {
+            Log.warnf("Keeping failed sandbox %s for inspection", name);
+        } else {
+            delete(name);
         }
-        SandboxResult result = parseResult(log);
-        Log.infof("Sandbox %s finished: %s", name, result == null ? "no result" : result.status());
-        return result;
+
+        if (outcome instanceof SandboxOutcome.Completed c) {
+            Log.infof("Sandbox %s finished: %s", name, c.result().status());
+        }
+        return outcome;
     }
 
     /** Deletes a running sandbox, used by A2A task cancellation. */
