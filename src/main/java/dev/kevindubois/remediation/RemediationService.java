@@ -17,9 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * verification evidence or a GitHub issue explaining the failure.
  * Operational issues skip the sandbox — they are not code defects.
  *
- * <p>Infrastructure failures (bad image, missing namespace, RBAC) are
- * reported as {@code infra_error} and never open a GitHub issue: they say
- * nothing about the repository.
+ * <p>Failures that say nothing about the repository never open a GitHub
+ * issue: infrastructure failures are reported as {@code infra_error}, a
+ * timed-out sandbox as {@code timeout}.
  */
 @ApplicationScoped
 public class RemediationService {
@@ -67,21 +67,28 @@ public class RemediationService {
         if (taskId != null) {
             runningSandboxes.put(taskId, sandboxName);
         }
-        SandboxResult result;
+        SandboxOutcome outcome;
         try {
-            result = sandboxRunner.run(sandboxName, request, prompt(request));
+            outcome = sandboxRunner.run(sandboxName, request, prompt(request));
         } finally {
             if (taskId != null) {
                 runningSandboxes.remove(taskId);
             }
         }
 
-        if (result == null) {
-            // the runner could not create or observe the sandbox — infrastructure
-            return new RemediationResponse("infra_error", null, null, null, 0, null, sandboxName,
-                    "sandbox infrastructure failure, see service logs");
+        if (outcome instanceof SandboxOutcome.Failed(var reason)) {
+            return switch (reason) {
+                case TIMEOUT -> failureResponse("timeout", "sandbox timed out before producing a result", sandboxName);
+                case CREATE_FAILED -> failureResponse("infra_error",
+                        "sandbox could not be created, see service logs", sandboxName);
+                case LOG_UNREADABLE -> failureResponse("infra_error",
+                        "sandbox pod log could not be read, see service logs", sandboxName);
+                case NO_RESULT -> failureResponse("infra_error",
+                        "sandbox finished without a result JSON, see service logs", sandboxName);
+            };
         }
-        if ("success".equals(result.status())) {
+        SandboxResult result = ((SandboxOutcome.Completed) outcome).result();
+        if (result.success()) {
             return createPullRequest(ownerRepo, request, result, sandboxName);
         }
         if ("agent_error".equals(result.status())) {
@@ -90,6 +97,11 @@ public class RemediationService {
         }
         return createIssue(ownerRepo, request,
                 "No verified fix produced (sandbox status: " + result.status() + ")");
+    }
+
+    /** A run that produced no result: nothing was created on GitHub, only the reason is reported. */
+    private static RemediationResponse failureResponse(String status, String message, String sandboxName) {
+        return new RemediationResponse(status, null, null, null, 0, null, sandboxName, message);
     }
 
     /** Cancels the sandbox backing an A2A task, if one is running. */
