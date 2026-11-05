@@ -31,15 +31,19 @@ RUN curl -fsSL https://opencode.ai/v2/install | bash -s -- --version 2.2.0 \
 # with UnsupportedClassVersionError on class file version 69.
 ENV JAVA_HOME=/usr/lib/jvm/java-25
 
-USER 1001
-WORKDIR /workspace
-
 # Pre-bake the Maven repository for the demo project so sandbox runs do not
 # spend minutes downloading dependencies through the egress allow-list.
-# Refresh by updating pom-demo.xml when the demo project's dependencies change.
-COPY --chown=1001:0 pom-demo.xml /tmp/pom-demo.xml
-RUN mvn -q -f /tmp/pom-demo.xml dependency:go-offline || true \
+# It is baked at /opt/maven-repo, NOT /home/sandbox/.m2: the Sandbox CR
+# mounts an empty agent-home volume over /home/sandbox at runtime, which
+# would shadow anything baked there — run-agent.sh seeds $HOME/.m2 from
+# this copy instead. Refresh by updating pom-demo.xml when the demo
+# project's dependencies change.
+COPY pom-demo.xml /tmp/pom-demo.xml
+RUN mvn -q -Dmaven.repo.local=/opt/maven-repo -f /tmp/pom-demo.xml dependency:go-offline || true \
     && rm /tmp/pom-demo.xml
+
+USER 1001
+WORKDIR /workspace
 
 COPY --chmod=755 run-agent.sh /usr/local/bin/run-agent.sh
 

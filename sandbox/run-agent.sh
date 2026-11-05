@@ -52,6 +52,18 @@ BRANCH_PREFIX=${BRANCH_PREFIX:-fix/k8s-issue}
 
 START=$(date +%s)
 log() { echo "[run-agent] $*" >&2; }
+elapsed() { echo $(( $(date +%s) - START )); }
+phase() { log "[$(elapsed)s] $*"; }
+
+# The writable agent-home volume shadows whatever the image baked under
+# /home/sandbox, so the pre-baked Maven repository lives in /opt/maven-repo.
+# Seed the local repo from it once — without this, every run re-downloads
+# the full dependency tree through the egress allow-list.
+if [[ -d /opt/maven-repo && ! -d "$HOME/.m2/repository" ]]; then
+  mkdir -p "$HOME/.m2"
+  cp -a /opt/maven-repo "$HOME/.m2/repository"
+  phase "seeded Maven repository from the image cache"
+fi
 
 result() {
   # Emit the result JSON on stdout and exit. Everything else goes to stderr.
@@ -81,6 +93,7 @@ fi
 git "${CLONE[@]}" "$AUTH_URL" "$REPO_DIR" || fail agent_error
 git -C "$REPO_DIR" remote set-url origin "$REPO_URL"
 cd "$REPO_DIR"
+phase "repository cloned"
 
 git config user.name "remediation-agent"
 git config user.email "remediation-agent@cluster.local"
@@ -173,6 +186,7 @@ fi
 # Drop the credentials from the wrapper's remaining steps too (the test run
 # would inherit them otherwise); the push re-injects the saved PUSH_TOKEN.
 unset GITHUB_TOKEN LLM_API_KEY
+phase "coding agent finished"
 
 # --- Reject tampering with the verification harness --------------------------
 # The agent may change production code and add NEW tests, but not build files
@@ -206,6 +220,7 @@ fi
 
 TEST_SUMMARY=$(grep -oE "Tests run: [0-9]+, Failures: [0-9]+, Errors: [0-9]+(, Skipped: [0-9]+)?" "$TEST_LOG" | tail -1 || true)
 TEST_SUMMARY=${TEST_SUMMARY:-tests passed (summary unavailable)}
+phase "test suite passed: $TEST_SUMMARY"
 
 # --- Push only what the tests approved --------------------------------------
 git add -A
@@ -215,4 +230,5 @@ Verified: $TEST_CMD ($TEST_SUMMARY)"
 GITHUB_TOKEN=$PUSH_TOKEN git push -q "$AUTH_URL" "HEAD:$BRANCH" || fail agent_error
 
 log "pushed $BRANCH ($FILES_CHANGED files, tests green)"
+phase "branch pushed: $BRANCH"
 result success "$BRANCH" "$FILES_CHANGED" "$TEST_SUMMARY"
