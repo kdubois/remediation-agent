@@ -1,0 +1,23 @@
+# Sandbox pods accept no inbound connections, so the coding agent cannot be
+# reached from the network.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-ingress
+  namespace: remediation
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Egress is the other half of the isolation. Standard NetworkPolicy cannot match
+# DNS names, so pick the mechanism your CNI provides:
+#
+# - OpenShift: an EgressFirewall with dnsName rules (github.com, api.github.com,
+#   objects.githubusercontent.com, codeload.github.com, the Maven and npm
+#   registries, the LLM endpoint, and the cluster DNS service).
+# - Cilium: a CiliumNetworkPolicy with toFQDNs.
+#
+# Without an egress allow-list the sandbox can reach the Kubernetes API and
+# other cluster services, which defeats the purpose of running the coding agent
+# in a separate namespace.

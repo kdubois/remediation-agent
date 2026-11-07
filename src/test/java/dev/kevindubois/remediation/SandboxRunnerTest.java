@@ -70,7 +70,7 @@ class SandboxRunnerTest {
                 "llm-secret", "key", "gh-secret", "key", 0, false);
         var runner = new SandboxRunner(client, new ObjectMapper(), config);
         var request = new RemediationRequest(
-                "https://github.com/kdubois/argo-rollouts-quarkus-demo", "main", "CODE_BUG",
+                "https://github.com/kdubois/argo-rollouts-aiops-dashboard", "main", "CODE_BUG",
                 "NPE in getStatus", "null dereference", "error rate spiked", "trace");
 
         var outcome = runner.run("remediation-timeout-test", request, "prompt");

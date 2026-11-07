@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: remediation-agent-config
+  namespace: remediation-system
+data:
+  # Only these repositories may be remediated. Comma-separated.
+  REMEDIATION_ALLOWED_REPOS: "https://github.com/kdubois/argo-rollouts-aiops-dashboard"
+
+  # Sandbox runtime
+  REMEDIATION_SANDBOX_IMAGE: "ghcr.io/kdubois/remediation-sandbox:opencode"
+  REMEDIATION_SANDBOX_CODING_AGENT: "opencode"
+  REMEDIATION_SANDBOX_NAMESPACE: "remediation"
+  REMEDIATION_SANDBOX_TIMEOUT_SECONDS: "2400"
+  REMEDIATION_SANDBOX_KEEP_FAILED: "false"
+
+  # Coding-agent model (any OpenAI-compatible endpoint)
+  REMEDIATION_SANDBOX_MODEL: "gpt-4o"
+  REMEDIATION_SANDBOX_LLM_BASE_URL: "https://api.openai.com/v1"
+  REMEDIATION_SANDBOX_LLM_SECRET_NAME: "remediation-agent"
+  REMEDIATION_SANDBOX_LLM_SECRET_KEY: "llm_api_key"
+
+  # GitHub credentials come from the same Secret
+  REMEDIATION_SANDBOX_GITHUB_SECRET_NAME: "remediation-agent"
+  REMEDIATION_SANDBOX_GITHUB_SECRET_KEY: "github_token"

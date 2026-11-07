@@ -96,9 +96,10 @@ public final class SandboxManifest {
     }
 
     private static PodSpec podSpec(SandboxConfig config, List<EnvVar> env) {
-        // No explicit fsGroup: restricted-v2 assigns one from the namespace
-        // range and rejects hardcoded values; the assigned group keeps the
-        // emptyDir volumes writable for the run-as-non-root container.
+        // fsGroup is left unset: OpenShift's restricted-v2 SCC assigns one from
+        // the namespace group range and rejects a hardcoded value. On plain
+        // Kubernetes the emptyDir volumes are world-writable by default, so the
+        // run-as-non-root container can still write to them.
         var podSecurityContext = new PodSecurityContextBuilder()
                 .withRunAsNonRoot(true)
                 .withNewSeccompProfile()
