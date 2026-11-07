@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: remediation-agent
+  namespace: remediation-system
+  labels:
+    app: remediation-agent
+spec:
+  selector:
+    app: remediation-agent
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

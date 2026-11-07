@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespaces.yaml
+  - configmap.yaml
+  - rbac.yaml
+  - deployment.yaml
+  - service.yaml
+  - sandbox-namespace.yaml
+
+# The secret is created manually and is not part of this kustomization:
+#   kubectl create secret generic remediation-agent -n remediation-system \
+#     --from-literal=github_token=... --from-literal=llm_api_key=...
+#   kubectl create secret generic remediation-agent -n remediation \
+#     --from-literal=github_token=... --from-literal=llm_api_key=...

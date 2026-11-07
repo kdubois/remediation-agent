@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 class RemediationServiceTest {
 
-    private static final String REPO = "https://github.com/kdubois/argo-rollouts-quarkus-demo";
+    private static final String REPO = "https://github.com/kdubois/argo-rollouts-aiops-dashboard";
 
     private final FakeSandboxRunner sandbox = new FakeSandboxRunner();
     private final FakeGitHub github = new FakeGitHub();
@@ -45,7 +45,7 @@ class RemediationServiceTest {
         // trailing slash and .git variants of the allow-listed repo pass
         for (String url : new String[] {
                 REPO + "/", REPO + ".git", REPO + ".git/",
-                "https://github.com/KDUBOIS/argo-rollouts-quarkus-demo" }) {
+                "https://github.com/KDUBOIS/argo-rollouts-aiops-dashboard" }) {
             sandbox.next = SandboxOutcome.completed(new SandboxResult("no_changes", null, 0, null, null, 0));
             var response = service.remediate(new RemediationRequest(url, "main", "CODE_BUG", null, "r", "a", null));
             assertThat(response.status()).as(url).isNotEqualTo("rejected");
@@ -55,7 +55,7 @@ class RemediationServiceTest {
     @Test
     void rejectsNonGithubUrlMatchingAllowListShape() {
         var response = service.remediate(
-                new RemediationRequest("https://evil.example.com/kdubois/argo-rollouts-quarkus-demo",
+                new RemediationRequest("https://evil.example.com/kdubois/argo-rollouts-aiops-dashboard",
                         "main", "CODE_BUG", null, "r", "a", null));
         assertThat(response.status()).isEqualTo("rejected");
     }
@@ -75,7 +75,7 @@ class RemediationServiceTest {
         assertThat(github.lastPullRequestBody).contains("Tests run: 10, Failures: 0");
         assertThat(github.lastPullRequestBody).contains("isolated sandbox");
         assertThat(github.lastPullRequestBody).contains("null dereference in getStatus");
-        assertThat(github.lastPullRequestBody).contains("https://github.com/kdubois/argo-rollouts-quarkus-demo/tree/fix/k8s-issue-1");
+        assertThat(github.lastPullRequestBody).contains("https://github.com/kdubois/argo-rollouts-aiops-dashboard/tree/fix/k8s-issue-1");
         assertThat(github.lastPullRequestHead).isEqualTo("fix/k8s-issue-1");
     }
 

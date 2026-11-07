@@ -38,7 +38,7 @@ class RemediationAgentExecutorTest {
     @Test
     void delegatesRequestAndEmitsResponseJson() throws Exception {
         var request = new RemediationRequest(
-                "https://github.com/kdubois/argo-rollouts-quarkus-demo", "main", "CODE_BUG",
+                "https://github.com/kdubois/argo-rollouts-aiops-dashboard", "main", "CODE_BUG",
                 "NPE in getStatus", "null dereference", "error rate spiked", "trace");
         var response = new RemediationResponse("success", "https://github.com/pr/1", null,
                 "fix/k8s-issue-1", 2, "Tests run: 10, Failures: 0", "remediation-ab", null);
