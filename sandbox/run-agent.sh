@@ -19,7 +19,8 @@
 #   COMMIT_TITLE         subject line for the fix commit
 #   ROOT_CAUSE           root cause from the canary analysis, used as commit body
 #   AGENT_TIMEOUT_SECONDS budget for the coding agent alone (default: 1200)
-#   TEST_CMD             verification command (default: ./mvnw test)
+#   TEST_CMD             verification command (default: offline Quarkus-tuned
+#                        mvn test — see below)
 #   WORKDIR              workspace (default: /workspace, must be writable)
 #
 # Output: a single JSON object on stdout, the last line of the log.
@@ -41,7 +42,12 @@ REMEDIATION_PROMPT=${REMEDIATION_PROMPT:?REMEDIATION_PROMPT is required}
 CODING_AGENT=${CODING_AGENT:-opencode}
 MODEL=${MODEL:-}
 AGENT_TIMEOUT_SECONDS=${AGENT_TIMEOUT_SECONDS:-1200}
-TEST_CMD=${TEST_CMD:-if ./mvnw -v >/dev/null 2>&1; then ./mvnw test; else mvn test; fi}
+# The verification runs offline against the Maven repository seeded from the
+# image, and shares one Quarkus boot across test classes (flat class path):
+# both cut minutes from sandbox runs on the CPU-limited sandbox pods. Offline
+# is safe because the wrapper rejects pom.xml changes, so the seed baked at
+# image-build time always covers the dependency set.
+TEST_CMD=${TEST_CMD:-if ./mvnw -v >/dev/null 2>&1; then ./mvnw -o -Dquarkus.test.flat-class-path=true test; else mvn -o -Dquarkus.test.flat-class-path=true test; fi}
 WORKDIR=${WORKDIR:-/workspace}
 
 # Restricted pods run as a random UID with no passwd entry, so HOME is unset
