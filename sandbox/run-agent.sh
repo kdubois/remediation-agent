@@ -70,6 +70,11 @@ if [[ -d /opt/maven-repo && ! -d "$HOME/.m2/repository" ]]; then
   cp -a /opt/maven-repo "$HOME/.m2/repository"
   phase "seeded Maven repository from the image cache"
 fi
+# the wrapper distribution is seeded alongside the repository — without it
+# every run downloads Maven itself through the egress allow-list
+if [[ -d /opt/maven-wrapper && ! -d "$HOME/.m2/wrapper" ]]; then
+  cp -a /opt/maven-wrapper "$HOME/.m2/wrapper"
+fi
 
 result() {
   # Emit the result JSON on stdout and exit. Everything else goes to stderr.
